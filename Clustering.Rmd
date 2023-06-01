@@ -1,0 +1,475 @@
+---
+title: "DataAnalysis_finalproject"
+author: "Ashwini"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+---
+
+Reading the Pricing model file
+```{r}
+# Install packages using excel
+#install.packages("readxl")
+library(readxl)
+
+setwd("D:/US Master's/Spring 2023/Data Analysis for DataScience/Final Project_Clustering/Datasets")
+
+df <- read_excel("Price_modelling_dataset.xlsx",sheet="Data")
+head(df)
+```
+Shape of the dataframe df
+
+```{r}
+dim(df)
+```
+
+There are around 21,662 rows and 34 columns in the dataframe
+
+### Data types of columns
+```{r}
+str(df)
+```
+### Data Description of above columns
+
+ID: Unique Identifier
+Requested_Amount: Loan Amount applied for
+Emi_Amount: Monthly Installment
+Age: Age of the borrower
+Applicant_Postal_Code: Zipcode of the location
+Duration_of_Current_Emp: Current work experience
+Product_Name1: Product interested in
+Product_Line: Product Line
+Loan_Term: Tenure of the loan
+Variant_Code: Code for Variant of the Product
+Manufacturer_Desc: Manufacturer
+Gender_Desc: Gender
+Martial_Status_Desc: Martial Status
+Applicant_State_Desc: State
+Applicant_City_Desc: City
+Resid_Owned_By_Desc: Residence Ownership Classification
+Employment_Type_Desc: Employment_Type_Classification
+Total_Work_Experience: Total Work Experience
+application_creation_date: Application Date
+Ex_Showroom_Price: Ex Show Room Price
+Segment: Segment as defined by SIAM
+Current Valuation: Depreciated Value
+Years_In_Current_Business: Current work experience esp for Self Employed
+No_Of_Years_At_Residence: No of years at the current residence
+No_Of_Years_In_City: No of years at the current city
+No_Of_Years_At_Business: No of years in curent business
+Segment_Desc: Description of the segment above
+Cost_Of_Vehicle: Asset Cost
+Average_Bank_Balance: Average Bank Balance maintained in last 6 months
+cibil_score: Bureau Score
+Disbursed: Flag to show whether the case is disbursed or not
+IRR: Interest Rate
+MAX_OD_F_12M: Max delinquency in forward 12 months ; this represents the performance of the account post disbursement
+TOTAL_NTECH_BNC_F12M: Total Bounce in forward 12 months ; this also represents the performance of the account post disbursement and is a leading indicator .
+
+
+## Data Cleaning
+
+We observe that there are lot of missing values present in the dataframe. We need to see whether to drop these rows or impute it with relevant value.
+
+Looking at the count of missing values across each column
+```{r}
+#install.packages("tidyverse")
+#install.packages("ggplot2")
+library(ggplot2)
+library(tidyverse)
+#install.packages("visdat")
+library(visdat)
+vis_miss(df,warn_large_data = FALSE,sort_miss = TRUE) + theme(text = element_text(size=10),axis.text.x = element_text(angle=90,hjust=0))
+```
+
+```{r}
+colnames(df)
+```
+Deleting columns having more than 50% nan rows in it
+
+```{r}
+df <- subset(df, select = -c(No_Of_Years_At_Business, Total_Work_Experience,Duration_Of_Current_Emp,MAX_OD_F_12M,TOTAL_NTECH_BNC_F12M,Average_Bank_Balance))
+```
+
+For other columns, adopting various techniques to get rid of nan values.
+```{r}
+cbind(
+   lapply(
+     lapply(df, is.na)
+     , sum)
+   )
+
+```
+```{r}
+summary(df)
+```
+From the above summary table we see that,
+
+- Emi_amount is as low as 0.
+- Current Valuation of the car being 1.
+- Ex_Showroom_Price considered as 0.
+- Emi_Amount to be a min of 0.
+- Requested_Amount being as low as 72.
+
+These all values may be a data entry error. For now, let us consider these anomolies as NaN values.
+
+```{r}
+df$Emi_Amount <- replace(df$Emi_Amount,df$Emi_Amount < 2000, NA)
+df$`Current Valuation` <- replace(df$`Current Valuation`,df$`Current Valuation` %in% c(1,9,100), NA)
+df$Ex_Showroom_Price <- replace(df$Ex_Showroom_Price , df$Ex_Showroom_Price == 0, NA)
+df$Requested_Amount <- replace(df$Requested_Amount , df$Requested_Amount == 72, NA)
+```
+
+
+#### Column Product_Name1
+
+Filling the nan values in column "Product Name" by values present in column "Product Line".
+
+```{r}
+print("NaN rows in column Product_Name")
+sum(is.na(df$Product_Name1))
+print("NaN rows in column Product_Line")
+sum(is.na(df$Product_Line))
+```
+Since column Product_Name has lot of missing values, we can impute those values from Product_Line.
+
+```{r}
+df$Product_Name1 <- ifelse(is.na(df$Product_Name1), df$Product_Line, df$Product_Name1)
+```
+
+```{r}
+# Filtering out the 3 nan rows of Product_Line and Product_Name
+df[is.na(df$Product_Line),]
+```
+
+Above output shows incomplete information present of the respective customers which would be difficult to consider for our analysis. Hence, we will be deleting these rows.
+```{r}
+df <- df[complete.cases(df$Product_Line), ]
+dim(df)
+```
+```{r}
+unique(df$Gender_Desc)
+unique(df$Marital_Status_Desc)
+```
+Categorical variables like "Gender" and "Martial Status" have nan's in them. Since, we cannot impute the information on assumption basis, let us replace the nan value by a category named "Unknown".
+
+```{r}
+install.packages("tidyverse")
+library(tidyverse)
+df <- df %>% replace_na(list(Gender_Desc = 'Unknown', Marital_Status_Desc = 'Unknown', Segment = 'Unknown',Segment_Desc = 'Unknown', Resid_Owned_By_Desc = 'Unknown', Employment_Type_Desc = 'Unknown'))
+```
+```{r}
+unique(df$Gender_Desc)
+unique(df$Marital_Status_Desc)
+```
+
+Checking sum of nan values present in the columns
+
+```{r}
+cbind(
+   lapply(
+     lapply(df, is.na)
+     , sum)
+   )
+```
+Deleting rows which have "NaN" rows in column Applicant_Postal_Code.
+```{r}
+#df <- df[complete.cases(df$Applicant_Postal_Code), ]
+#dim(df)
+```
+
+```{r}
+df[is.na(df$Applicant_City_Desc),]
+```
+```{r}
+indian_pincode <- read.csv("C:/Users/Ratnala_Ashwini/Downloads/india pincode final.csv")
+head(indian_pincode)
+```
+
+```{r}
+pincode_df <- df[is.na(df$Applicant_City_Desc),]
+
+city_state_map <- merge(pincode_df,indian_pincode,
+                 by.x = "Applicant_Postal_Code",
+                 by.y = "pincode")
+
+
+# Imputing nan values in Applicant_City_Desc and Applicant_State_Desc from columns Districtname and statename
+city_state_map$Applicant_City_Desc <- ifelse(is.na(city_state_map$Applicant_City_Desc), city_state_map$Districtname, city_state_map$Applicant_City_Desc)
+
+city_state_map$Applicant_State_Desc <- ifelse(is.na(city_state_map$Applicant_State_Desc), city_state_map$statename, city_state_map$Applicant_State_Desc)
+
+head(city_state_map)
+
+# Drop colums Taluk, Districtname and statename
+
+city_state_map <- subset(city_state_map, select = -c(Taluk, Districtname, statename))
+
+# Rename of columns
+#colnames(city_state_map)[colnames(city_state_map) %in% #c("Applicant_State_Desc","Applicant_City_Desc")] <- c("State_Desc","City_Desc")
+
+head(city_state_map)
+
+# Merge of city_state_map with main dataframe df
+
+df <- merge(x = df,y = city_state_map, by = "Applicant_Postal_Code",all.x = TRUE)
+
+# Replace the nan in Applicant_City_Desc and Applicant_State_Desc columns with ending with .y
+df$Applicant_State_Desc.x <- ifelse(is.na(df$Applicant_State_Desc.x), df$Applicant_State_Desc.y, df$Applicant_State_Desc.x)
+
+df$Applicant_City_Desc.x <- ifelse(is.na(df$Applicant_City_Desc.x), df$Applicant_City_Desc.y, df$Applicant_City_Desc.x)
+
+# Dropping columns ending with .y
+df <- df %>% select(-contains('.y'))
+head(df)
+
+# Replace the column names ending with .x
+names(df) <- gsub(".x$", "", names(df))
+
+colnames(df)[colnames(df) == 'Current Valuation'] <- 'Current_Valuation'
+```
+
+
+```{r}
+cbind(
+   lapply(
+     lapply(df, is.na)
+     , sum)
+   )
+```
+```{r}
+#install.packages("mice")
+library(mice)
+
+df_numeric <- df %>%
+  select(Cost_Of_Vehicle,cibil_score,No_Of_Years_In_City,No_Of_Years_At_Residence,Years_In_Current_Business,Current_Valuation,Ex_Showroom_Price,Loan_Term,Emi_Amount,Requested_Amount)
+md.pattern(df_numeric,rotate.names = TRUE)
+```
+```{r}
+#install.packages('VIM')
+library(VIM)
+aggr_plot <- aggr(df_numeric, col=c('navyblue','red'), numbers=TRUE, sortVars=TRUE, labels=names(df_numeric), cex.axis=.7, gap=3, ylab=c("Histogram of missing data","Pattern"))
+```
+
+
+
+```{r}
+imputed_Data <- mice(df_numeric, m=5, maxit = 2, method = 'cart', seed = 500)
+summary(imputed_Data)
+```
+```{r}
+completedData <- complete(imputed_Data,3)
+completedData
+```
+
+```{r}
+for(i in names(df_numeric)) {
+  df[i] <- completedData[i]
+}
+```
+
+```{r}
+cbind(
+   lapply(
+     lapply(df, is.na)
+     , sum)
+   )
+```
+
+Omit all nan rows
+```{r}
+df <- na.omit(df)
+```
+
+Frequency distribution of numerical columns
+```{r}
+summary(df)
+```
+```{r}
+head(df)
+```
+
+We see some uneven distribution among numerical features
+```{r}
+install.packages("Hmisc")
+library(Hmisc)
+remove_cols <- c("Applicant_Postal_Code","ID")
+new_df = subset(df, select = !(names(df) %in% remove_cols)) 
+num_data <-new_df[, sapply(new_df, is.numeric)] 
+hist.data.frame(num_data)
+```
+Inspite of changing the anomalies to nan and imputing we still see the distribution being very skewed. As it is a clustering problem, we won't be applying any log transformation here.
+
+For now, let us consider the log transformation for it.
+
+### Bi-variate Analysis of features:
+
+Cost of Vehicle w.r.t Manufacturer
+```{r}
+unique(df$Manufacturer_Desc)
+```
+```{r}
+library(tidyverse)
+ ggplot(data=df,aes(x=reorder(Segment_Desc, -Ex_Showroom_Price),y=Ex_Showroom_Price)) +
+ geom_bar(stat="identity") +
+ guides(fill=FALSE) +
+ ggtitle("Ex_Showroom_Price per Segment") +
+ theme(axis.text.x = element_text(angle=90, vjust=1, hjust=1))
+ #options(repr.plot.width=70, repr.plot.height=20)
+```
+In the above plot Mid-Size segments shows the highest cost of vehicles followed by Compact. However, the above insights are purely based on the data provided.
+
+Distribution based on Manufacturer
+```{r}
+require(gridExtra)
+plot1 <- qplot(Age, data=df, geom="density", fill=factor(Gender_Desc), alpha=I(.5),
+main="Distribution of Age w.r.t Gender", xlab="Age", ylab="Density")
+plot2 <- qplot(Age, data=df, geom="density", fill=factor(Marital_Status_Desc), alpha=I(.5),
+main="Distribution of Age w.r.t Martial Status", xlab="Age", ylab="Density")
+grid.arrange(plot1,plot2,nrow=2)
+```
+
+In the above density plots,
+
+Gender Description vs Age:
+
+- Many of the customers haven't mentioned their Gender, who are somewhere in their 30's, 40-45's.
+- Male and Female Gender almost have similar distribution across various ages
+Age of customers to the Loan Term
+
+Martial_status vs Age:
+
+- Customers belonging to 20-40 are mostly single.While Married,Divorced,Unknown Status seem to overlap each other between ages 20-60.
+
+
+```{r}
+qplot(Employment_Type_Desc,Ex_Showroom_Price,data=df, geom=c("boxplot","jitter"), fill=Employment_Type_Desc, main="Price by Employment Pattern", xlab="", ylab="Cost_of_Vehicle") +
+theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+```
+Here, the data shows customers who are Self Employed Non-Professional purchase cars at higher cost compared to other employment types.
+
+
+Correlation among variables
+
+```{r}
+#install.packages("corrplot")
+#install.packages("corrgram")
+library(corrgram)
+cor(num_data)
+corrgram(num_data)
+```
+
+```{r}
+cat_cols <- unlist(lapply(df, is.character))
+df1_obj <- df[,cat_cols]
+head(df1_obj)
+```
+
+```{r}
+
+data1 <- table(df1_obj$Product_Name1,df1_obj$Product_Line)
+chisq.test(data1)
+
+data2 <- table(df1_obj$Variant_Code,df1_obj$Manufacturer_Desc)
+chisq.test(data2)
+
+data3 <- table(df1_obj$Applicant_City_Desc,df1_obj$Applicant_State_Desc)
+chisq.test(data3)
+
+data4 <- table(df1_obj$Resid_Owned_By_Desc,df1_obj$Employment_Type_Desc)
+chisq.test(data4)
+
+data5 <- table(df1_obj$Segment_Desc,df1_obj$Segment)
+chisq.test(data5)
+
+data6 <- table(df1_obj$Gender_Desc,df1_obj$Marital_Status_Desc)
+chisq.test(data6)
+
+
+```
+We see there is a high relationship among all the pairs of categorical variables.Hence,we will be dropping each variable of the pair.
+
+```{r}
+df <- subset(df, select = -c(Variant_Code,Gender_Desc,
+                                 Applicant_State_Desc,
+                                 Employment_Type_Desc,Segment_Desc,
+                                 Product_Name1,ID,application_creation_date,Applicant_Postal_Code))
+head(df)
+```
+```{r}
+cat_cols1 <- unlist(lapply(df, is.character))
+df[cat_cols1] <- lapply(df[cat_cols1], factor)
+
+```
+
+```{r}
+#install.packages("Rtsne")
+library(Rtsne)
+library(cluster)
+
+# Compute Gower distance
+gower_dist <- daisy(df, metric = "gower")
+
+# Compute Gower matrix
+gower_mat <- as.matrix(gower_dist)
+
+```
+In business scenario, we usually search for number of clusters both meaningful and easy to remember i.e. 2 to 8 maximum. The silhouette figure helps us identify the best option.
+
+```{r}
+
+"
+sil_width <- c(NA)
+for(i in 2:8){
+  pam_fit <- pam(gower_dist, diss = TRUE, k = i)
+  print(pam_fit)
+  sil_width[i] <- pam_fit$silinfo$avg.width
+  print(sil_width[i])
+}
+
+plot(1:8, sil_width,
+     xlab = Number of clusters,
+     ylab = Silhouette Width)
+lines(1:8, sil_width)
+"
+
+```
+From the above plot, 5 seems to be the optimum cluster. Hence, we will be choosing 5 clusters for our cluster profiling.
+
+### Interpretation
+
+- Summary of each cluster
+```{r}
+k <- 5
+pam_fit <- pam(gower_dist, diss = TRUE, k)
+pam_results <- df %>%
+  mutate(cluster = pam_fit$clustering) %>%
+  group_by(cluster) %>%
+  do(the_summary = summary(.))
+pam_results$the_summary
+```
+
+Here, we derive common patterns for customers within a cluster.
+
+Cluster 1:
+
+Manufacturer preferred is: Hyundai X Segment (A3) X Married Individuals X Purchased for Self X Applicants belong to NewDelhi apart from other cities X Disbursed being "No"
+
+Cluster 2:
+
+Manufacturer preferred is: Maruti X Segment (A2) X Married Individuals X Purchased for Self X Applicants belong to Hyderabad apart from other cities X Disbursed being "No"
+
+Cluster 3:
+
+Manufacturer preferred is: Mahindra X Segment (MUV) X Married Individuals X Purchased for Self X Applicants belong to Mumbai apart from other cities X Disbursed being "No"
+
+Cluster 4:
+
+Manufacturer preferred is: Maruti X Segment (A2) X Married Individuals X Purchased for Self X Applicants belong to Bangalore apart from other cities X Disbursed being "Yes"
+
+Cluster 5:
+
+Manufacturer preferred is: Toyota X Segment (A3) X Married Individuals X Purchased for Self X Applicants belong to Hyderabad apart from other cities X Disbursed being "Yes"
+
+
